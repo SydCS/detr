@@ -18,7 +18,7 @@ class HungarianMatcher(nn.Module):
     """
 
     def __init__(
-        self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1
+            self, cost_class: float = 1, cost_bbox: float = 1, cost_giou: float = 1
     ):
         """Creates the matcher
 
@@ -32,7 +32,7 @@ class HungarianMatcher(nn.Module):
         self.cost_bbox = cost_bbox
         self.cost_giou = cost_giou
         assert (
-            cost_class != 0 or cost_bbox != 0 or cost_giou != 0
+                cost_class != 0 or cost_bbox != 0 or cost_giou != 0
         ), "all costs cant be 0"
 
     @torch.no_grad()
@@ -65,12 +65,13 @@ class HungarianMatcher(nn.Module):
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+        tgt_ids = torch.cat([v["labels"] for v in targets])  # [num_GT]
+        print(tgt_ids)
+        tgt_bbox = torch.cat([v["boxes"] for v in targets])  # [num_GT, 4]
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL, but approximate it in 1 - proba[target class].
-        # The 1 is a constant that doesn't change the matching, it can be ommitted.
-        cost_class = -out_prob[:, tgt_ids]
+        # The 1 is a constant that doesn't change the matching, it can be omitted.
+        cost_class = -out_prob[:, tgt_ids]  # [batch_size * num_queries, num_GT]
 
         # Compute the L1 cost between boxes
         cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)
@@ -82,15 +83,16 @@ class HungarianMatcher(nn.Module):
 
         # Final cost matrix
         C = (
-            self.cost_bbox * cost_bbox
-            + self.cost_class * cost_class
-            + self.cost_giou * cost_giou
+                self.cost_bbox * cost_bbox
+                + self.cost_class * cost_class
+                + self.cost_giou * cost_giou
         )
         C = C.view(bs, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [
-            linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))
+            linear_sum_assignment(c[i])
+            for i, c in enumerate(C.split(sizes, -1))  # 求解匹配
         ]
         return [
             (

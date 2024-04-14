@@ -15,7 +15,6 @@ from util.misc import (
     interpolate,
     is_dist_avail_and_initialized,
 )
-
 from .backbone import build_backbone
 from .matcher import build_matcher
 from .segmentation import (
@@ -47,7 +46,8 @@ class DETR(nn.Module):
         hidden_dim = transformer.d_model
         self.class_embed = nn.Linear(
             hidden_dim, num_classes + 1
-        )  # 0 为 dummy (1~91 91为背景)
+        )  # 0为dummy (1~91 91为no_obj)
+        # https://github.com/facebookresearch/detr/issues/108#issuecomment-674854977
         self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.query_embed = nn.Embedding(num_queries, hidden_dim)  # (100, 256)
         self.input_proj = nn.Conv2d(
@@ -73,15 +73,17 @@ class DETR(nn.Module):
         """
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
-        features, pos = self.backbone(samples)  # pos?
+        features, pos = self.backbone(samples)
 
         src, mask = features[
             -1
-        ].decompose()  # (N, 2048, W/32, H/32), mask(N, W/32, H/32)
+        ].decompose()  # (N, 2048, W/32, H/32), mask (N, W/32, H/32)
         assert mask is not None
         hs = self.transformer(
             self.input_proj(src), mask, self.query_embed.weight, pos[-1]
-        )[0]
+        )[
+            0
+        ]  # (decoder_layers, N, 100, 256)
 
         outputs_class = self.class_embed(hs)
         outputs_coord = self.bbox_embed(hs).sigmoid()
@@ -100,7 +102,7 @@ class DETR(nn.Module):
         # as a dict having both a Tensor and a list.
         return [
             {"pred_logits": a, "pred_boxes": b}
-            for a, b in zip(outputs_class[:-1], outputs_coord[:-1])  # 除最后一层算 aux loss
+            for a, b in zip(outputs_class[:-1], outputs_coord[:-1])  # 前面的层，算 aux loss
         ]
 
 
@@ -187,10 +189,10 @@ class SetCriterion(nn.Module):
             [t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0
         )
 
-        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")  # L1损失
-
         losses = {}
-        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes  # L1 损失
 
         loss_giou = 1 - torch.diag(
             box_ops.generalized_box_iou(
@@ -198,7 +200,8 @@ class SetCriterion(nn.Module):
                 box_ops.box_cxcywh_to_xyxy(target_boxes),
             )
         )
-        losses["loss_giou"] = loss_giou.sum() / num_boxes  # GIoU损失
+        losses["loss_giou"] = loss_giou.sum() / num_boxes  # GIoU 损失
+
         return losses
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
@@ -284,7 +287,9 @@ class SetCriterion(nn.Module):
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+            losses.update(
+                self.get_loss(loss, outputs, targets, indices, num_boxes)
+            )  # 添加 "labels", "boxes", "cardinality" loss
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if "aux_outputs" in outputs:
@@ -350,7 +355,7 @@ class MLP(nn.Module):
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(
-            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])  # 简洁
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim])  # 简洁！
         )
 
     def forward(self, x):
@@ -368,7 +373,7 @@ def build(args):
     # you should pass `num_classes` to be 2 (max_obj_id + 1).
     # For more details on this, check the following discussion
     # https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223
-    num_classes = 20 if args.dataset_file != "coco" else 91  # COCO: 90+1
+    num_classes = 20 if args.dataset_file != "coco" else 91  # 类别数 COCO: 90+1
     if args.dataset_file == "coco_panoptic":
         # for panoptic, we just add a num_classes that is large enough to hold
         # max_obj_id + 1, but the exact value doesn't really matter
@@ -377,7 +382,6 @@ def build(args):
 
     backbone = build_backbone(args)
     transformer = build_transformer(args)
-
     model = DETR(
         backbone,
         transformer,

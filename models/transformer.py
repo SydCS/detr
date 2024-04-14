@@ -62,26 +62,34 @@ class Transformer(nn.Module):
     def forward(self, src, mask, query_embed, pos_embed):
         # flatten NxCxHxW to HWxNxC
         bs, c, h, w = src.shape
-        src = src.flatten(2).permute(2, 0, 1)
+        src = src.flatten(2).permute(
+            2, 0, 1
+        )  # (N, 256, W/32, H/32) -> (W/32 * H/32, N, 256)
 
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
 
-        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
+        query_embed = query_embed.unsqueeze(1).repeat(
+            1, bs, 1
+        )  # (100, 256) -> (100, N, 256)
         mask = mask.flatten(1)
 
-        tgt = torch.zeros_like(query_embed)  # 初始层 ?
+        tgt = torch.zeros_like(query_embed)  # decoder 初始层
 
-        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)  # ( )
+        memory = self.encoder(
+            src, src_key_padding_mask=mask, pos=pos_embed
+        )  # 过 encoder: (W/32 * H/32, N, 256)
 
-        hs = self.decoder(  # ( )
+        hs = self.decoder(
             tgt,
             memory,
             memory_key_padding_mask=mask,
             pos=pos_embed,
-            query_pos=query_embed,
-        )
+            query_pos=query_embed,  # query_embedding 以位置编码的形式加入
+        )  # 过 decoder: (decoder_layers, 100, N, 256)
 
-        return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+        return hs.transpose(1, 2), memory.permute(1, 2, 0).view(
+            bs, c, h, w
+        )  # (decoder_layers, N, 100, 256), (N, 256, W/32, H/32)
 
 
 class TransformerEncoder(nn.Module):
@@ -287,7 +295,7 @@ class TransformerDecoderLayer(nn.Module):
         pos: Optional[Tensor] = None,
         query_pos: Optional[Tensor] = None,
     ):
-        q = k = self.with_pos_embed(tgt, query_pos)  # 对 Q K 加位置编码
+        q = k = self.with_pos_embed(tgt, query_pos)
 
         tgt2 = self.self_attn(
             q, k, value=tgt, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
@@ -328,8 +336,8 @@ class TransformerDecoderLayer(nn.Module):
             q, k, value=tgt2, attn_mask=tgt_mask, key_padding_mask=tgt_key_padding_mask
         )[0]
         tgt = tgt + self.dropout1(tgt2)
-
         tgt2 = self.norm2(tgt)
+
         tgt2 = self.multihead_attn(
             query=self.with_pos_embed(tgt2, query_pos),
             key=self.with_pos_embed(memory, pos),
@@ -338,8 +346,8 @@ class TransformerDecoderLayer(nn.Module):
             key_padding_mask=memory_key_padding_mask,
         )[0]
         tgt = tgt + self.dropout2(tgt2)
-
         tgt2 = self.norm3(tgt)
+
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
         tgt = tgt + self.dropout3(tgt2)
         return tgt

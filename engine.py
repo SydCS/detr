@@ -2,11 +2,11 @@
 """
 Train and eval functions used in main.py
 """
-import math
 import os
 import sys
 from typing import Iterable
 
+import math
 import torch
 
 import util.misc as utils
@@ -15,13 +15,13 @@ from datasets.panoptic_eval import PanopticEvaluator
 
 
 def train_one_epoch(
-    model: torch.nn.Module,
-    criterion: torch.nn.Module,
-    data_loader: Iterable,
-    optimizer: torch.optim.Optimizer,
-    device: torch.device,
-    epoch: int,
-    max_norm: float = 0,
+        model: torch.nn.Module,
+        criterion: torch.nn.Module,
+        data_loader: Iterable,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device,
+        epoch: int,
+        max_norm: float = 0,
 ):
     model.train()
     criterion.train()
@@ -43,7 +43,7 @@ def train_one_epoch(
         weight_dict = criterion.weight_dict
         losses = sum(
             loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict
-        )
+        )  # 各个 loss 乘以 weight 相加
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
@@ -83,7 +83,7 @@ def train_one_epoch(
 
 @torch.no_grad()
 def evaluate(
-    model, criterion, postprocessors, data_loader, base_ds, device, output_dir
+        model, criterion, postprocessors, data_loader, base_ds, device, output_dir
 ):
     model.eval()
     criterion.eval()

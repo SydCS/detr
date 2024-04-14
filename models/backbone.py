@@ -123,7 +123,7 @@ class Backbone(BackboneBase):
         super().__init__(backbone, train_backbone, num_channels, return_interm_layers)
 
 
-class Joiner(nn.Sequential):  # TODO ?
+class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
@@ -133,7 +133,7 @@ class Joiner(nn.Sequential):  # TODO ?
         pos = []
         for name, x in xs.items():
             out.append(x)
-            # position encoding
+            # CNN 接 position encoding
             pos.append(self[1](x).to(x.tensors.dtype))
 
         return out, pos

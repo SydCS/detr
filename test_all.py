@@ -1,17 +1,17 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import io
 import unittest
+from typing import List
 
 import torch
 from torch import nn, Tensor
-from typing import List
 
+from hubconf import detr_resnet50, detr_resnet50_panoptic
+from models.backbone import Backbone
 from models.matcher import HungarianMatcher
 from models.position_encoding import PositionEmbeddingSine, PositionEmbeddingLearned
-from models.backbone import Backbone, Joiner, BackboneBase
 from util import box_ops
 from util.misc import nested_tensor_from_tensor_list
-from hubconf import detr_resnet50, detr_resnet50_panoptic
 
 # onnxruntime requires python 3.5 or above
 try:
